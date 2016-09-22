@@ -1,6 +1,8 @@
 # subservice
 Multi-language service configuration and integration testing.
 
+Hides Dockerfile, docker-compose, ENV variables behind a `subservice.yml`.
+
 ## Javascript
 
 Imagine a Node app in `PROJECT_DIR/node-auth/`.
@@ -28,9 +30,18 @@ subsurface up
 ```yml
 # PROJECT_DIR/node-auth/subsurface.yml
 
-node: node src/index.js
-mysql: mysqlClient
-rabbitmq: amqpClient
+app:
+  image: node:latest
+  command: node src/index.js
+services:
+  mysql: mysql:latest
+    client-instance-name: mysqlClient
+    private: true
+  rabbitmq: rabbitmq:latest
+    client-instance-name: amqpClient
+    inherit: true
+test: 
+  command: npm test
 ```
 
 ```js
@@ -81,11 +92,22 @@ production:
 ```
 
 ```yml
-# PROJECT_DIR/api/subsurface.yml
+# PROJECT_DIR/rails-api/subsurface.yml
 
-rails: rails s
-mysql: activerecord-mysql-adapter
-rabbitmq: amqp
+app: 
+  image: rails:latest
+  command: rails s
+services:
+  mysql: mysql:latest
+    active-record-adapter-gem: activerecord-mysql-adapter
+    client-instance-name: MySQLClient
+    private: true
+  rabbitmq: rabbitmq:latest
+    ruby-client-gem: amqp
+    client-instance-name: AMQPClient
+    inherit: true
+test: 
+  command: rspec
 ```
 
 ```bash
@@ -104,7 +126,7 @@ Bypass Docker creation and inject parent env variables instead:
 
 ```bash
 # in PROJECT_DIR/rails-api/
-subservice up --rabbitmq AMQP_URL --mysql MYSQL_URL
+subservice up --rabbitmqUrl $AMQP_URL --mysqlUrl $MYSQL_URL
 ```
 
 Get services and env variables from a discovery service like etcd, Consul or Zookeeper
@@ -118,16 +140,20 @@ subservice up --discovery
 
 # Integration tests
 
-Subservice supports nested services via nested folders with `subservice.yml`
+Subservice supports nested services via nested folders with `subservice.yml`.
 
 ```
 # PROJECT_DIR/subservice.yml
-test:
-  rabbitmq: amqpClient
+app: node:latest # or ruby:latest
+services:
+  rabbitmq: rabbitmq:latest
+    private: true
+apps:
   auth: node-auth/subservice.yml
   search: rails-search/subservice.yml
   api: rails-api/subservice.yml
-  command: node test/integration-spec.js | tap-spec # or rspec
+test: 
+  command: npm test | tap-spec # or rspec
 ```
 
 ```bash
@@ -135,9 +161,9 @@ test:
 subservice test
 
 # builds and runs rabbitmq
-# passes in AMQP_URL to node-auth, rails-search, rails-api
-# node-auth, rails-search, rails-api launch their own test services and setup their own databases
-# runs command node test/integration-spec.js pipes resuls to tap-spec
+# passes in AMQP_URL to node-auth, rails-search, rails-api because the have inherit: true
+# node-auth, rails-search, rails-api launch their own test services and setup their own databases for private: true
+# builds node and runs command npm test and pipes resuls to tap-spec
 ```
 
 Javascript test, although could be written in any language:
